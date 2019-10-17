@@ -45,7 +45,7 @@ def get_User_Data(reddit, Search_User, Search_Subs_List, Expiration=14, Source='
         SQLDATA = get_user_sub_data_sql(Search_User, sreddit)
         User_Data.update(SQLDATA)
         if not sreddit in User_Data:
-            #logger.debug('# Not found in DB, GO FISH')
+            #logger.debug('# %s Not found in DB, GO FISH', sreddit)
             Needed_List.append('sreddit')
 
     # for the data we do not have, go fish
@@ -72,15 +72,14 @@ def get_user_sub_data_sql(Search_User, Search_Sub):
     SQLDATA = {}
 
     try:
+        #logger.debug("SQL search: %s" % Search_Sub)
         con = sqlite3.connect(database)
         qcur = con.cursor()
         qcur.execute(sql_create_userdata_table)
-        qcur.execute('''SELECT ifnull(comment_karma,0), ifnull(comment_count,0), ifnull(comment_median_length,0), ifnull(sub_karma,0), ifnull(sub_count,0), ifnull(top_words,''), ifnull(grade_level,''), ifnull(comment_profanity_pct,'') FROM userdata WHERE user=? and sub=? and epoch > strftime('%s','now', '-7 day') order by epoch DESC LIMIT 1''', (str(Search_User),Search_Sub))
+        execute = qcur.execute('''SELECT comment_karma, comment_count, comment_median_length, sub_karma, sub_count, top_words, grade_level, comment_profanity_pct FROM userdata WHERE user=? and sub=? order by epoch DESC LIMIT 1''', (str(Search_User),Search_Sub))
         row = qcur.fetchone()
-        #keys = row.keys()
         if row:
             SQLDATA[Search_Sub] = {}
-
             SQLDATA[Search_Sub]['c_karma'] = row[0]
             SQLDATA[Search_Sub]['c_count'] = row[1]
             SQLDATA[Search_Sub]['c_median_length'] = row[2]
@@ -89,9 +88,13 @@ def get_user_sub_data_sql(Search_User, Search_Sub):
             SQLDATA[Search_Sub]['top_words'] = row[5]
             SQLDATA[Search_Sub]['grade_level'] = row[6]
             SQLDATA[Search_Sub]['p_pct'] = row[7]
-            
+
+            #logger.debug("FOUND: %s" % SQLDATA[Search_Sub]) 
+
     except sqlite3.Error as e:
         logger.error( "Error2 {}:".format(e.args[0]))
+        logger.error( "User=%s Sub=%s" % (Search_User, Search_Sub))
+        sys.exit(1)
         logger.error( "User=%s Sub=%s" % (Search_User, Search_Sub))
         sys.exit(1)
     finally:
@@ -220,6 +223,7 @@ def fetch_Data_reddit(reddit, Search_User, Search_Subs_List, Expiration=14):
             Fetch_Data[sreddit]['top_words'] = ''
             Fetch_Data[sreddit]['grade_level'] = ''
 
+    #print ("FETCH: %s" % Fetch_Data)
     return Fetch_Data
 
 
