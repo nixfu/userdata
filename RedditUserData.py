@@ -41,16 +41,17 @@ def get_User_Data(reddit, Search_User, Search_Subs_List, Expiration=14, Source='
 
     # first get the data we already have in the cache DB
     for sreddit in Search_Subs_List:
-        #logger.debug('get_User_Data: User=%s Sub=%s' % (Search_User, sreddit))
+        logger.debug('get_User_Data: User=%s Sub=%s' % (Search_User, sreddit))
         SQLDATA = get_user_sub_data_sql(Search_User, sreddit)
         User_Data.update(SQLDATA)
         if not sreddit in User_Data:
-            #logger.debug('# %s Not found in DB, GO FISH', sreddit)
-            Needed_List.append('sreddit')
+            logger.debug('# %s Not found in DB, GO FISH', sreddit)
+            Needed_List.append(sreddit)
 
     # for the data we do not have, go fish
     if len(Needed_List) > 0:
-        logger.debug("Sub Needed_List > 0 (%s)" % len(Needed_List))
+        logger.info("# Sub Needed_List > 0 (%s)" % len(Needed_List))
+        logger.debug("# %s" % Needed_List)
         if Source == 'reddit':
             Fetch_Data = fetch_Data_reddit(reddit,Search_User,Search_Subs_List)
         else:
@@ -71,12 +72,17 @@ def get_user_sub_data_sql(Search_User, Search_Sub):
     sub_count=-1
     SQLDATA = {}
 
+    MaxDaysOld = 14
+    MaxAge_Epoch = int(time.time()) - (MaxDaysOld * 86400)
+
     try:
-        #logger.debug("SQL search: %s" % Search_Sub)
-        con = sqlite3.connect(database)
+        con = sqlite3.connect(database, timeout=30)
+        #con.set_trace_callback(print)
         qcur = con.cursor()
-        qcur.execute(sql_create_userdata_table)
-        execute = qcur.execute('''SELECT comment_karma, comment_count, comment_median_length, sub_karma, sub_count, top_words, grade_level, comment_profanity_pct FROM userdata WHERE user=? and sub=? order by epoch DESC LIMIT 1''', (str(Search_User),Search_Sub))
+        #qcur.execute(sql_create_userdata_table)
+        username=str(Search_User)
+        searchsub=str(Search_Sub)
+        execute = qcur.execute('SELECT comment_karma, comment_count, comment_median_length, sub_karma, sub_count, top_words, grade_level, comment_profanity_pct FROM userdata WHERE user=? and sub=? and epoch>? order by epoch DESC LIMIT 1', (username,searchsub,MaxAge_Epoch))
         row = qcur.fetchone()
         if row:
             SQLDATA[Search_Sub] = {}
@@ -89,7 +95,7 @@ def get_user_sub_data_sql(Search_User, Search_Sub):
             SQLDATA[Search_Sub]['grade_level'] = row[6]
             SQLDATA[Search_Sub]['p_pct'] = row[7]
 
-            #logger.debug("FOUND: %s" % SQLDATA[Search_Sub]) 
+            logger.debug("FOUND: %s" % SQLDATA[Search_Sub]) 
 
     except sqlite3.Error as e:
         logger.error( "Error2 {}:".format(e.args[0]))
@@ -108,8 +114,8 @@ def update_user_sub_data_sql(Search_User, Fetch_Data):
     try:
         logger.debug("Insert Data into DB")
         insert_user=str(Search_User)
-        insert_time=int(round(time.time())-(86400 * 7))
-        con = sqlite3.connect(database)
+        insert_time=int(time.time())
+        con = sqlite3.connect(database, timeout=30)
         insert_sql = ''' INSERT INTO userdata(user,epoch,sub,comment_karma,comment_count,comment_median_length,sub_karma,sub_count,top_words,grade_level,comment_profanity_pct) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) '''
         icur = con.cursor()
         # create table if not exist
@@ -223,7 +229,7 @@ def fetch_Data_reddit(reddit, Search_User, Search_Subs_List, Expiration=14):
             Fetch_Data[sreddit]['top_words'] = ''
             Fetch_Data[sreddit]['grade_level'] = ''
 
-    #print ("FETCH: %s" % Fetch_Data)
+    logger.debug("FETCH: %s" % Fetch_Data)
     return Fetch_Data
 
 
